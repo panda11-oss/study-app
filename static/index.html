@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>資格勉強アプリ</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: sans-serif; background: #f5f5f5; color: #333; }
+.header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 18px; font-weight: 500; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #e8f5e9; color: #2e7d32; }
+.badge.warn { background: #fff8e1; color: #f57f17; }
+.location-toggle { display: flex; gap: 4px; margin-left: auto; background: #f0f0f0; border-radius: 6px; padding: 3px; }
+.loc-btn { font-size: 12px; padding: 4px 12px; border: none; background: none; cursor: pointer; border-radius: 4px; color: #666; }
+.loc-btn.active { background: #fff; color: #333; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.container { max-width: 720px; margin: 0 auto; padding: 20px; }
+.tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid #e0e0e0; }
+.tab { padding: 10px 20px; font-size: 14px; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: #888; margin-bottom: -1px; }
+.tab.active { color: #333; border-bottom-color: #333; font-weight: 500; }
+.section { display: none; }
+.section.active { display: block; }
+.topic-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 16px; }
+.topic-btn { padding: 10px 12px; font-size: 13px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; cursor: pointer; text-align: left; }
+.topic-btn.selected { border: 2px solid #1976d2; background: #e3f2fd; color: #1976d2; }
+.row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.row select { flex: 1; font-size: 13px; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff; min-width: 100px; }
+.row button { padding: 8px 16px; font-size: 14px; cursor: pointer; border-radius: 6px; border: 1px solid #e0e0e0; background: #fff; }
+.score-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.score-card { background: #fff; border-radius: 8px; padding: 12px 16px; flex: 1; text-align: center; border: 1px solid #e0e0e0; }
+.score-label { font-size: 12px; color: #888; }
+.score-val { font-size: 22px; font-weight: 500; }
+.question-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+.question-text { font-size: 15px; line-height: 1.7; margin-bottom: 16px; }
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choice-btn { padding: 10px 14px; font-size: 14px; text-align: left; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 6px; cursor: pointer; }
+.choice-btn:hover:not(:disabled) { background: #f0f0f0; }
+.choice-btn.correct { background: #e8f5e9; border-color: #4caf50; color: #2e7d32; }
+.choice-btn.wrong { background: #ffebee; border-color: #f44336; color: #c62828; }
+.explanation { background: #f5f5f5; border-left: 3px solid #1976d2; padding: 12px 14px; font-size: 14px; line-height: 1.7; color: #555; margin-top: 12px; display: none; border-radius: 0 6px 6px 0; }
+.chat-messages { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; min-height: 80px; }
+.msg { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.7; max-width: 92%; }
+.msg.user { background: #e3f2fd; color: #1565c0; align-self: flex-end; border-radius: 10px 10px 4px 10px; }
+.msg.assistant { background: #f5f5f5; color: #333; align-self: flex-start; border-radius: 4px 10px 10px 10px; }
+.chat-input-row { display: flex; gap: 8px; }
+.chat-input-row input { flex: 1; font-size: 14px; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 6px; }
+.chat-input-row button { padding: 0 20px; font-size: 14px; cursor: pointer; border-radius: 6px; border: 1px solid #e0e0e0; background: #fff; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ddd; border-top-color: #888; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 2rem; color: #888; font-size: 14px; }
+.settings-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.settings-row label { font-size: 13px; color: #666; min-width: 120px; }
+.settings-row input[type=text] { flex: 1; font-size: 13px; padding: 8px; border: 1px solid #e0e0e0; border-radius: 6px; }
+.note-box { font-size: 12px; color: #666; line-height: 1.7; background: #f5f5f5; border-radius: 6px; padding: 12px; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>資格勉強アプリ</h1>
+  <span class="badge" id="ollamaBadge">確認中...</span>
+  <div class="location-toggle">
+    <button class="loc-btn active" id="btnHome" onclick="setLocation('home')">自宅</button>
+    <button class="loc-btn" id="btnAway" onclick="setLocation('away')">外出先</button>
+  </div>
+</div>
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('quiz')">問題を解く</button>
+    <button class="tab" onclick="switchTab('chat')">Q&A チャット</button>
+    <button class="tab" onclick="switchTab('settings')">設定</button>
+  </div>
+
+  <div id="quiz" class="section active">
+    <p style="font-size:13px;color:#888;margin-bottom:12px;">テーマを選んで問題を生成します</p>
+    <div class="topic-grid" id="topicGrid"></div>
+    <div class="row">
+      <select id="diffSelect">
+        <option value="レベル1">レベル1（基礎）</option>
+        <option value="レベル2">レベル2（応用）</option>
+      </select>
+      <select id="countSelect" style="max-width:100px;">
+        <option value="1">1問</option>
+        <option value="3" selected>3問</option>
+        <option value="5">5問</option>
+      </select>
+      <button onclick="randomQuiz()" style="background:#f5f5f5;">🎲 ランダム</button>
+      <button onclick="generateQuiz()" id="genBtn">生成する</button>
+    </div>
+    <div class="score-row" id="scoreRow" style="display:none;">
+      <div class="score-card"><div class="score-label">正解</div><div class="score-val" id="scoreCorrect">0</div></div>
+      <div class="score-card"><div class="score-label">不正解</div><div class="score-val" id="scoreWrong">0</div></div>
+      <div class="score-card"><div class="score-label">正答率</div><div class="score-val" id="scoreRate">–</div></div>
+    </div>
+    <div id="quizArea"><div class="empty-state">テーマを選んで「生成する」を押してください</div></div>
+  </div>
+
+  <div id="chat" class="section">
+    <div id="chatMessages" class="chat-messages">
+      <div class="msg assistant">こんにちは！LinuCの勉強をサポートします。わからないコマンド、設定ファイル、概念など何でも聞いてください。</div>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="質問を入力..." onkeydown="if(event.key==='Enter')sendChat()" />
+      <button onclick="sendChat()">送信</button>
+    </div>
+  </div>
+
+  <div id="settings" class="section">
+    <p style="font-size:13px;color:#888;margin-bottom:16px;">接続設定</p>
+    <div class="settings-row">
+      <label>サーバー URL</label>
+      <input type="text" id="serverUrl" value="http://localhost:8002" />
+    </div>
+    <div class="settings-row">
+      <label>モデル</label>
+      <input type="text" id="modelName" value="qwen2.5:14b" />
+    </div>
+    <div class="settings-row">
+      <label>llm-trainer URL</label>
+      <input type="text" id="apiBase" value="http://localhost:8001" />
+    </div>
+    <div class="settings-row">
+      <label>RAG検索</label>
+      <input type="checkbox" id="ragEnabled" checked style="width:auto;flex:none;" />
+      <span style="font-size:13px;color:#666;">llm-trainer の /api/search を使用</span>
+    </div>
+    <button onclick="testConnection()" style="font-size:13px;padding:8px 14px;cursor:pointer;border-radius:6px;border:1px solid #e0e0e0;background:#fff;margin-bottom:8px;">接続テスト</button>
+    <div id="connStatus" style="font-size:13px;color:#666;min-height:20px;"></div>
+    <div class="note-box">
+      右上の <strong>自宅 / 外出先</strong> で自動切り替えされます。<br>
+      自宅: <code>localhost:8002</code>　外出先: <code>100.73.95.59:8002</code>
+    </div>
+  </div>
+</div>
+
+<script>
+const LOCATIONS = {
+  home: { server: 'http://localhost:8002', api: 'http://localhost:8001' },
+  away: { server: 'http://100.73.95.59:8002', api: 'http://100.73.95.59:8001' },
+};
+const TOPICS = [
+  {id:'file',label:'ファイル操作'},{id:'process',label:'プロセス管理'},
+  {id:'network',label:'ネットワーク'},{id:'user',label:'ユーザー管理'},
+  {id:'permission',label:'パーミッション'},{id:'shell',label:'シェルスクリプト'},
+  {id:'package',label:'パッケージ管理'},{id:'boot',label:'起動・systemd'},
+  {id:'log',label:'ログ管理'},{id:'storage',label:'ストレージ・LVM'},
+  {id:'cron',label:'cronジョブ'},{id:'ssh',label:'SSH・セキュリティ'},
+];
+
+let selectedTopics = new Set(['file']);
+let scoreCorrect = 0, scoreWrong = 0;
+let currentQuestions = [];
+let chatHistory = [];
+
+function getServerUrl(){ return document.getElementById('serverUrl').value.replace(/\/$/,''); }
+function getModel(){ return document.getElementById('modelName').value||'qwen2.5:14b'; }
+function getApiBase(){ return document.getElementById('apiBase').value.replace(/\/$/,''); }
+function ragEnabled(){ return document.getElementById('ragEnabled').checked; }
+
+function setLocation(loc){
+  document.getElementById('btnHome').classList.toggle('active', loc==='home');
+  document.getElementById('btnAway').classList.toggle('active', loc==='away');
+  document.getElementById('serverUrl').value = LOCATIONS[loc].server;
+  document.getElementById('apiBase').value = LOCATIONS[loc].api;
+  checkOllama();
+}
+
+function renderTopics(){
+  document.getElementById('topicGrid').innerHTML = TOPICS.map(t=>
+    `<button class="topic-btn${selectedTopics.has(t.id)?' selected':''}" onclick="toggleTopic('${t.id}')">${t.label}</button>`
+  ).join('');
+}
+function toggleTopic(id){
+  if(selectedTopics.has(id)){ if(selectedTopics.size>1) selectedTopics.delete(id); }
+  else selectedTopics.add(id);
+  renderTopics();
+}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['quiz','chat','settings'][i]===name));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+}
+
+async function callLLM(messages, systemPrompt){
+  const msgs = systemPrompt ? [{role:'system',content:systemPrompt},...messages] : messages;
+  const res = await fetch(`${getServerUrl()}/api/llm`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({model:getModel(), messages:msgs, stream:false})
+  });
+  if(!res.ok) throw new Error('サーバーエラー: '+res.status);
+  const data = await res.json();
+  return data.message?.content||'';
+}
+
+async function fetchRag(query){
+  try{
+    const res = await fetch(`${getApiBase()}/api/search?q=${encodeURIComponent(query)}`);
+    if(!res.ok) return '';
+    const data = await res.json();
+    if(!data.results?.length) return '';
+    return data.results.slice(0,3).map(r=>r.content||r.text||'').join('\n---\n');
+  }catch{ return ''; }
+}
+
+async function generateQuiz(){
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true; btn.textContent = '生成中...';
+  const area = document.getElementById('quizArea');
+  area.innerHTML = '<div class="empty-state"><span class="spinner"></span>問題を作成中...</div>';
+
+  const topics = [...selectedTopics].map(id=>TOPICS.find(t=>t.id===id)?.label).join('、');
+  const level = document.getElementById('diffSelect').value;
+  const count = parseInt(document.getElementById('countSelect').value);
+  let ragContext = ragEnabled() ? await fetchRag(`LinuC ${topics} ${level}`) : '';
+
+  const system = `あなたはLinuC資格試験の問題作成者です。${ragContext?`\n参考情報:\n${ragContext}\n`:''}必ずJSONの配列のみを返してください。前後に説明文やコードブロック記号を含めないこと。
+形式: [{"question":"問題文","choices":["A.選択肢","B.選択肢","C.選択肢","D.選択肢"],"answer":0,"explanation":"解説"}]
+answerは正解のインデックス(0-3)。`;
+
+  try{
+    const raw = await callLLM([{role:'user',content:`${level}の「${topics}」から${count}問の4択問題を作成してください。`}], system);
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const questions = JSON.parse(clean.slice(clean.indexOf('['), clean.lastIndexOf(']')+1));
+    currentQuestions = questions;
+    renderQuestions(questions);
+    document.getElementById('scoreRow').style.display = 'flex';
+  }catch(e){
+    area.innerHTML = `<div class="empty-state" style="color:#c62828;">生成に失敗しました。接続を確認してください。<br><small>${e.message}</small></div>`;
+  }
+  btn.disabled = false; btn.textContent = '生成する';
+}
+
+function randomQuiz(){
+  const allIds = TOPICS.map(t => t.id);
+  const shuffled = allIds.sort(() => Math.random() - 0.5);
+  const picked = shuffled.slice(0, 3);
+  selectedTopics = new Set(picked);
+  renderTopics();
+  generateQuiz();
+}
+
+function renderQuestions(questions){
+  document.getElementById('quizArea').innerHTML = questions.map((q,qi)=>`
+    <div class="question-card">
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">問題 ${qi+1} / ${questions.length}</div>
+      <div class="question-text">${q.question}</div>
+      <div class="choices" id="choices${qi}">
+        ${q.choices.map((c,ci)=>`<button class="choice-btn" onclick="answer(${qi},${ci})">${c}</button>`).join('')}
+      </div>
+      <div class="explanation" id="exp${qi}">${q.explanation}</div>
+    </div>`).join('');
+}
+
+function answer(qi,ci){
+  const q = currentQuestions[qi];
+  const btns = document.querySelectorAll(`#choices${qi} .choice-btn`);
+  btns.forEach(b=>b.disabled=true);
+  btns[ci].classList.add(ci===q.answer?'correct':'wrong');
+  if(ci!==q.answer) btns[q.answer].classList.add('correct');
+  document.getElementById(`exp${qi}`).style.display='block';
+  if(ci===q.answer) scoreCorrect++; else scoreWrong++;
+  document.getElementById('scoreCorrect').textContent = scoreCorrect;
+  document.getElementById('scoreWrong').textContent = scoreWrong;
+  document.getElementById('scoreRate').textContent = Math.round(scoreCorrect/(scoreCorrect+scoreWrong)*100)+'%';
+}
+
+async function sendChat(){
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value = '';
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML += `<div class="msg user">${text}</div>`;
+  msgs.innerHTML += `<div class="msg assistant" id="aiThinking"><span class="spinner"></span>考え中...</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  chatHistory.push({role:'user',content:text});
+  let ragContext = ragEnabled() ? await fetchRag(text) : '';
+  const system = `あなたはLinuC資格試験の学習をサポートするAIです。Linux・サーバー管理の質問にわかりやすく正確に回答してください。コマンド例も積極的に示してください。${ragContext?`\n参考情報:\n${ragContext}`:''}`;
+  try{
+    const reply = await callLLM(chatHistory, system);
+    chatHistory.push({role:'assistant',content:reply});
+    document.getElementById('aiThinking').outerHTML = `<div class="msg assistant">${reply.replace(/\n/g,'<br>').replace(/`([^`]+)`/g,'<code style="background:#f0f0f0;padding:1px 5px;border-radius:4px;font-size:13px;">$1</code>')}</div>`;
+  }catch{
+    document.getElementById('aiThinking').outerHTML = `<div class="msg assistant" style="color:#c62828;">サーバーに接続できませんでした。設定を確認してください。</div>`;
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function testConnection(){
+  const status = document.getElementById('connStatus');
+  status.innerHTML = '<span class="spinner"></span>接続中...';
+  let results = [];
+  try{ const r = await fetch(`${getServerUrl()}/api/health`); results.push(r.ok?'study-app ✓':`study-app ✗(${r.status})`); }
+  catch{ results.push('study-app ✗'); }
+  try{ const r = await fetch(`${getApiBase()}/api/health`); results.push(r.ok?'llm-trainer ✓':`llm-trainer ✗(${r.status})`); }
+  catch{ results.push('llm-trainer ✗'); }
+  status.textContent = results.join('　');
+}
+
+async function checkOllama(){
+  const badge = document.getElementById('ollamaBadge');
+  badge.textContent = '確認中...';
+  try{
+    const r = await fetch(`${getServerUrl()}/api/health`);
+    badge.textContent = r.ok ? 'サーバー接続済み' : 'サーバー未接続';
+    badge.className = r.ok ? 'badge' : 'badge warn';
+  }catch{
+    badge.textContent = 'サーバー未接続';
+    badge.className = 'badge warn';
+  }
+}
+
+renderTopics();
+checkOllama();
+</script>
+</body>
+</html>

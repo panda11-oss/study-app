@@ -1,0 +1,8 @@
+services:
+  study-app:
+    build: .
+    ports:
+      - "8002:8002"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
