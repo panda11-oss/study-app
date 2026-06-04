@@ -103,12 +103,18 @@ body { font-family: sans-serif; background: #f5f5f5; color: #333; }
   </div>
 
   <div id="chat" class="section">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <button onclick="clearChatHistory()" style="font-size:12px;padding:4px 10px;cursor:pointer;border-radius:4px;border:1px solid #e0e0e0;background:#fff;color:#888;">履歴クリア</button>
+    </div>
     <div id="chatMessages" class="chat-messages">
       <div class="msg assistant">こんにちは！LinuCの勉強をサポートします。わからないコマンド、設定ファイル、概念など何でも聞いてください。</div>
     </div>
     <div class="chat-input-row">
-      <input type="text" id="chatInput" placeholder="質問を入力..." onkeydown="if(event.key==='Enter')sendChat()" />
-      <button onclick="sendChat()">送信</button>
+      <textarea id="chatInput" placeholder="質問を入力..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}" rows="2" style="resize:vertical;font-family:sans-serif;font-size:14px;padding:10px 12px;border:1px solid #e0e0e0;border-radius:6px;flex:1;"></textarea>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button id="sendBtn" onclick="sendChat()">送信</button>
+        <button id="stopBtn" onclick="stopChat()" style="display:none;background:#fff;border:1px solid #f44336;color:#f44336;padding:0 16px;font-size:14px;cursor:pointer;border-radius:6px;">停止</button>
+      </div>
     </div>
   </div>
 
@@ -157,7 +163,17 @@ const TOPICS = [
 let selectedTopics = new Set(['file']);
 let scoreCorrect = 0, scoreWrong = 0;
 let currentQuestions = [];
-let chatHistory = [];
+let chatHistory = JSON.parse(localStorage.getItem('chatHistory')||'[]');
+
+function saveChatHistory(){
+  try{ localStorage.setItem('chatHistory', JSON.stringify(chatHistory)); }catch(e){}
+}
+
+function clearChatHistory(){
+  chatHistory = [];
+  localStorage.removeItem('chatHistory');
+  document.getElementById('chatMessages').innerHTML = '<div class="msg assistant">こんにちは！LinuCの勉強をサポートします。わからないコマンド、設定ファイル、概念など何でも聞いてください。</div>';
+}
 
 function getServerUrl(){ return document.getElementById('serverUrl').value.replace(/\/$/,''); }
 function getModel(){ return document.getElementById('modelName').value||'qwen2.5:14b'; }
@@ -272,26 +288,61 @@ function answer(qi,ci){
   document.getElementById('scoreRate').textContent = Math.round(scoreCorrect/(scoreCorrect+scoreWrong)*100)+'%';
 }
 
+let chatAbortController = null;
+
+function stopChat(){
+  if(chatAbortController) chatAbortController.abort();
+  const thinking = document.getElementById('aiThinking');
+  if(thinking) thinking.outerHTML = `<div class="msg assistant" style="color:#888;">停止しました。</div>`;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('stopBtn').style.display = 'none';
+}
+
 async function sendChat(){
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
   if(!text) return;
   input.value = '';
   const msgs = document.getElementById('chatMessages');
-  msgs.innerHTML += `<div class="msg user">${text}</div>`;
+  msgs.innerHTML += `<div class="msg user">${text.replace(/\n/g,'<br>')}</div>`;
   msgs.innerHTML += `<div class="msg assistant" id="aiThinking"><span class="spinner"></span>考え中...</div>`;
   msgs.scrollTop = msgs.scrollHeight;
+
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = '';
+
   chatHistory.push({role:'user',content:text});
+  saveChatHistory();
+  chatAbortController = new AbortController();
+
   let ragContext = ragEnabled() ? await fetchRag(text) : '';
   const system = `あなたはLinuC資格試験の学習をサポートするAIです。Linux・サーバー管理の質問にわかりやすく正確に回答してください。コマンド例も積極的に示してください。${ragContext?`\n参考情報:\n${ragContext}`:''}`;
+
   try{
-    const reply = await callLLM(chatHistory, system);
+    const msgs2 = systemPrompt => [{role:'system',content:systemPrompt},...chatHistory];
+    const res = await fetch(`${getServerUrl()}/api/llm`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model:getModel(), messages:[{role:'system',content:system},...chatHistory], stream:false}),
+      signal: chatAbortController.signal
+    });
+    if(!res.ok) throw new Error('サーバーエラー: '+res.status);
+    const data = await res.json();
+    const reply = data.message?.content||'';
     chatHistory.push({role:'assistant',content:reply});
-    document.getElementById('aiThinking').outerHTML = `<div class="msg assistant">${reply.replace(/\n/g,'<br>').replace(/`([^`]+)`/g,'<code style="background:#f0f0f0;padding:1px 5px;border-radius:4px;font-size:13px;">$1</code>')}</div>`;
-  }catch{
-    document.getElementById('aiThinking').outerHTML = `<div class="msg assistant" style="color:#c62828;">サーバーに接続できませんでした。設定を確認してください。</div>`;
+    saveChatHistory();
+    const thinking = document.getElementById('aiThinking');
+    if(thinking) thinking.outerHTML = `<div class="msg assistant">${reply.replace(/\n/g,'<br>').replace(/`([^`]+)`/g,'<code style="background:#f0f0f0;padding:1px 5px;border-radius:4px;font-size:13px;">$1</code>')}</div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  }catch(e){
+    if(e.name==='AbortError') return;
+    const thinking = document.getElementById('aiThinking');
+    if(thinking) thinking.outerHTML = `<div class="msg assistant" style="color:#c62828;">サーバーに接続できませんでした。設定を確認してください。</div>`;
+  }finally{
+    document.getElementById('sendBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'none';
+    chatAbortController = null;
   }
-  msgs.scrollTop = msgs.scrollHeight;
 }
 
 async function testConnection(){
@@ -320,6 +371,18 @@ async function checkOllama(){
 
 renderTopics();
 checkOllama();
+
+// チャット履歴を復元
+(function(){
+  if(chatHistory.length === 0) return;
+  const msgs = document.getElementById('chatMessages');
+  msgs.innerHTML = '';
+  chatHistory.forEach(m => {
+    const cls = m.role === 'user' ? 'user' : 'assistant';
+    msgs.innerHTML += `<div class="msg ${cls}">${m.content.replace(/\n/g,'<br>').replace(/\`([^\`]+)\`/g,'<code style="background:#f0f0f0;padding:1px 5px;border-radius:4px;font-size:13px;">$1</code>')}</div>`;
+  });
+  msgs.scrollTop = msgs.scrollHeight;
+})();
 </script>
 </body>
 </html>
